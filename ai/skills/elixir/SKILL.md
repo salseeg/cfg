@@ -14,6 +14,8 @@ Based on lessons from 150k+ lines of production Elixir code.
 
 **NEVER** write defensive nil-checking or if/else chains. Use pattern matching to assert expectations.
 
+Prefer a single function definition with `case` for branching. Use multi-clause functions only when each clause is truly trivial (for example, one-line formatters or direct pass-through guards).
+
 ```elixir
 # BAD - Defensive (Python/Ruby style)
 def process_user(user) do
@@ -28,13 +30,19 @@ def process_user(user) do
   end
 end
 
-# GOOD - Assertive (Idiomatic Elixir)
-def process_user(%User{email: email}) when is_binary(email) do
-  send_email(email)
-end
+# GOOD - Assertive (Project style: prefer case for branching)
+def process_user(user) do
+  case user do
+    %User{email: email} when is_binary(email) ->
+      send_email(email)
 
-def process_user(%User{email: nil}), do: {:error, :no_email}
-def process_user(nil), do: {:error, :no_user}
+    %User{email: nil} ->
+      {:error, :no_email}
+
+    nil ->
+      {:error, :no_user}
+  end
+end
 ```
 
 ### 2. Let It Crash Philosophy
@@ -97,8 +105,8 @@ end
 ```elixir
 # Pattern match on event names and extract params in function head
 def handle_event("delete", %{"id" => id}, socket) do
-  # ...
-end
+      # ...
+  end
 
 def handle_event("update", %{"id" => id, "value" => value}, socket) do
   # ...
@@ -235,7 +243,7 @@ When working on Elixir projects:
 | Anti-Pattern | Idiomatic Alternative |
 |--------------|----------------------|
 | `if x != nil` | Pattern match: `def f(%{x: x}) when not is_nil(x)` |
-| Nested if/else | Multiple function clauses or `with` |
+| Nested if/else | `case` or `with` |
 | `try/rescue` for control flow | Pattern match on `{:ok, _}` / `{:error, _}` |
 | `Enum.map` + `Enum.filter` | `Enum.filter` then `Enum.map`, or `for` comprehension |
 | String concatenation `<>` in loops | `IO.iodata_to_binary` with iolists |
