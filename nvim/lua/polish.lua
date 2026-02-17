@@ -103,3 +103,13 @@ vim.keymap.set("i", "<S-Tab>", "<Esc>:b#<cr>")
 --     ["~/%.config/foo/.*"] = "fooscript",
 --   },
 -- }
+
+vim.api.nvim_create_user_command('Windsurf', function()
+  local file = vim.fn.expand('%:p')
+  local line = vim.fn.line('.')
+  local col = vim.fn.col('.')
+  vim.fn.jobstart(
+    { 'windsurf', '--goto', file .. ':' .. line .. ':' .. col, '--reuse-window' },
+    { detach = true }
+  )
+end, {})
