@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# Smart git/jj UI launcher
+#
+# Behavior:
+# - Recursively searches current dir and parents for repository markers
+# - Priority: .jj > .git
+# - If jj repo found AND lazyjj/jj commands available -> launch lazyjj
+# - Otherwise -> launch lazygit (for git repos, no repo, or missing jj tools)
+#
+# check_repo_type() returns: "jj" | "git" | "not found"
+
+# Check current dir and parents for repo type
+check_repo_type() {
+    local dir="$PWD"
+
+    while [ "$dir" != "/" ]; do
+        if [ -d "$dir/.jj" ]; then
+            echo "jj"
+            return
+        elif [ -d "$dir/.git" ]; then
+            echo "git"
+            return
+        fi
+        dir=$(dirname "$dir")
+    done
+
+    echo "not found"
+}
+
+repo_type=$(check_repo_type)
+
+if [ "$repo_type" = "jj" ] && \
+   command -v lazyjj >/dev/null 2>&1 && \
+   command -v jj >/dev/null 2>&1; then
+    lazyjj
+else
+    lazygit
+fi
