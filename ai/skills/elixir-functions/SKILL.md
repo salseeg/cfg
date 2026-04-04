@@ -62,11 +62,11 @@ defp pub_key(%Room{pub_key: key}), do: key
 
 ## Control Flow
 
-There are three shapes a function body should take. If you're reaching for something else, reconsider the structure.
+There are three shapes a function body should take. They can combine naturally (a pipe ending in a case, a select inside `then/2`), but each function should have one *primary* shape that the reader recognizes at a glance.
 
 ### 1. Pipe — linear transformation
 
-Data flows in one direction through a sequence of steps. No branching, no error handling — just transform. Use `then/2` for inline value reshaping and `tap/2` for side effects that shouldn't alter the data.
+Data flows in one direction through a sequence of steps. Use `then/2` for inline value reshaping and `tap/2` for side effects that shouldn't alter the data. Do not add defensive nil-checks or error-tuple guards mid-pipe — let it crash if the data is wrong.
 
 ```elixir
 def format_report(raw_data) do
@@ -85,15 +85,41 @@ def store_and_notify(parcel) do
 end
 ```
 
-### 2. Select — choosing between two outcomes
+#### Pipe into select
 
-When a function produces one of two kinds of result (success/failure, this/that), pick the construct that fits:
+A pipe can end with a `case` or `then/2` that branches — the pipe does the transformation, the tail picks the outcome. Prefer `case` when it fits; reach for `then/2` only when you need to bind the piped value to a name or destructure it in a way `case` can't express cleanly:
+
+```elixir
+def unmount(device) do
+  device
+  |> normalize_device_path()
+  |> Maintenance.device_to_path()
+  |> then(fn
+    nil  -> :nothing_to_unmount
+    path -> Mount.unmount(path)
+  end)
+end
+
+def file_stats(keys, prefix \\ nil) do
+  keys
+  |> Dir2.file_path(build_path(prefix))
+  |> File.stat(time: :posix)
+  |> case do
+    {:ok, _} = good -> good
+    _ -> keys |> Dir3.file_path(build_path(prefix)) |> File.stat(time: :posix)
+  end
+end
+```
+
+### 2. Select — choosing between a small number of outcomes
+
+When a function picks between a few distinct paths, use the construct that fits the branching condition:
 
 - **`case`** — matching on a value's shape
 - **`if`** — simple boolean
 - **`cond`** — multiple boolean conditions
 - **`with`** (happy path) — chaining operations that might fail, first failure falls through
-- **`with`** (inverse — unhappy path) — the failure cases go in the `with` body, success goes in `else`
+- **`with`** (inverse — unhappy path) — failure cases go in the `with` body, success goes in `else`
 
 #### `case` for dispatch
 
@@ -123,64 +149,81 @@ end
 
 #### Inverse `with` — handling the unhappy path
 
-Sometimes the interesting work is detecting a problem. The `with` head matches the *unhappy* conditions so the body handles the failure, and `else` handles the normal case:
+Sometimes the interesting work is detecting a problem. The `with` head matches the *unhappy* conditions so the body handles the failure, and `else` handles the normal case.
+
+Note: `<-` in `with` serves double duty — it can guard (match fails → skip to else) or just bind a value for later clauses. In this pattern the first and third clauses are guards (`true <-`, `false <-`), while the middle one is a binding step:
 
 ```elixir
 defp fail_invalid_user_card(changeset) do
   with true <- changeset.valid?,
        card_data <- Ecto.Changeset.apply_changes(changeset),
        false <- UserData.valid_card?(card_data) do
-    # unhappy: card is invalid — add the error
+    # unhappy: card looked valid but integrity check failed
     Ecto.Changeset.add_error(changeset, :user_hash, "invalid_user_card_integrity")
   else
-    # happy: either changeset was already invalid or card passed validation
+    # normal: changeset already invalid, or card passed validation
     _ -> changeset
   end
 end
 ```
 
-Use this when the function's job is "check for a specific problem, otherwise pass through." The `with` body is the exceptional branch; `else` is the common case.
+Use this when the function's job is "check for a specific problem, otherwise pass through."
 
-### 3. Early Return — a chain of steps that can bail out
+### 3. Railway — a chain of steps that can bail out
 
-When you have a sequence of operations where any step might end the whole thing, use a list of functions with `Enum.reduce_while`. Each step returns `{:cont, acc}` to continue or `{:halt, result}` to stop.
+When you have a sequence of fallible operations and simpler constructs (`case`, `if`, `with`) don't keep the code flat, declare each step as a named anonymous function, then chain them through a short-circuit helper. Each step either returns a terminal value (`:ok`, `{:ok, _}`, `{:error, _}`) to stop, or a raw value that flows into the next step.
 
-This replaces deeply nested `with` chains or custom railway helpers. The control flow is standard Elixir — the reader sees the step list up front and knows exactly what can happen.
+Declare steps as named anonymous functions at the top of the function body, then put the pipeline at the bottom. The variable names document intent, reading order matches execution order, and the pipeline reads as a summary.
 
 ```elixir
-def initialize(opts) do
-  [
-    &check_already_initialized/1,
-    &run_initdb/1,
-    &validate_init_result/1,
-    &setup_replication/1
-  ]
-  |> Enum.reduce_while(opts, fn step, acc -> step.(acc) end)
-end
+def stop(opts) do
+  pg_data_dir = Path.join(Keyword.fetch!(opts, :pg_dir), "data")
+  run_dir = extract_pg_run_dir(pg_dir, opts)
 
-defp check_already_initialized(opts) do
-  case {initialized?(opts), valid_init?(opts)} do
-    {true, true}  -> {:halt, :ok}
-    {true, false} -> {:halt, {:error, :incorrectly_initialized}}
-    {false, _}    -> {:cont, opts}
+  check_running = fn
+    false ->
+      ["PostgreSQL server not running"] |> log(:info)
+      :ok
+
+    true ->
+      ["Stopping PostgreSQL server with run_dir ", run_dir] |> log(:info)
+      run_pg("pg_ctl", ["-D", pg_data_dir, "stop", "-m", "fast"],
+        as_postgres_user: true, run_dir: run_dir)
   end
-end
 
-defp run_initdb(opts) do
-  case run_pg("initdb", build_args(opts), as_postgres_user: true) do
-    {_, 0} = result -> {:cont, {opts, result}}
-    {output, _}     -> {:halt, {:error, output}}
+  handle_result = fn
+    {_, 0} ->
+      ["PostgreSQL server stopped successfully"] |> log(:info)
+      :ok
+
+    {output, _} ->
+      ["PostgreSQL server failed to stop: ", output] |> log(:error)
+      {:error, output}
+  end
+
+  server_running?(opts)
+  |> go_on(check_running)
+  |> go_on(handle_result)
+end
+```
+
+The short-circuit helper is minimal — it passes raw values through and propagates terminal states unchanged:
+
+```elixir
+def go_on(data, step_fn) do
+  case data do
+    {:error, _} -> data
+    {:ok, _}    -> data
+    :ok         -> data
+    _           -> step_fn.(data)
   end
 end
 ```
 
-Each step is a small, named, testable function. The main function is declarative — it lists the steps. The step functions are implementive — they do the work.
+Steps can produce different shapes between them — unlike `reduce_while`, there's no homogeneous accumulator constraint. Each step pattern-matches on whatever the previous step produced.
 
 ## When to split
 
-If a function body doesn't fit one of these three shapes cleanly, it's doing too much. Split it so each piece is one of:
-- a pipe
-- a select
-- an early-return chain
+If a function body doesn't fit one of these three shapes cleanly, it's doing too much. Split it so each piece has one obvious shape.
 
-The goal is not rules for their own sake — it's to make the reader's job easy. Every function should have one obvious shape that a reader recognizes immediately.
+The goal is not rules for their own sake — it's to make the reader's job easy. A reader should look at any function and immediately recognize: "this is a pipe", "this is a case dispatch", "this is a step chain."
