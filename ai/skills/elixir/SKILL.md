@@ -14,8 +14,6 @@ Based on lessons from 150k+ lines of production Elixir code.
 
 **NEVER** write defensive nil-checking or if/else chains. Use pattern matching to assert expectations.
 
-Prefer a single function definition with `case` for branching. Use multi-clause functions only when each clause is truly trivial (for example, one-line formatters or direct pass-through guards).
-
 ```elixir
 # BAD - Defensive (Python/Ruby style)
 def process_user(user) do
@@ -30,7 +28,7 @@ def process_user(user) do
   end
 end
 
-# GOOD - Assertive (Project style: prefer case for branching)
+# GOOD - Assertive
 def process_user(user) do
   case user do
     %User{email: email} when is_binary(email) ->
@@ -44,6 +42,8 @@ def process_user(user) do
   end
 end
 ```
+
+For function structure, control flow shapes (pipe, select, railway), single-clause preference, and when to split — follow the **elixir-functions** skill.
 
 ### 2. Let It Crash Philosophy
 
@@ -83,35 +83,7 @@ def handle_event("save", %{"name" => name, "email" => email}, socket) do
 end
 ```
 
-### 4. Use `with` for Happy Path Pipelines
-
-Chain operations that may fail, pattern matching on success at each step.
-
-```elixir
-# GOOD
-def create_order(params) do
-  with {:ok, user} <- fetch_user(params.user_id),
-       {:ok, product} <- fetch_product(params.product_id),
-       {:ok, order} <- Orders.create(%{user: user, product: product}) do
-    {:ok, order}
-  end
-end
-```
-
 ## Phoenix LiveView Patterns
-
-### Handle Events with Multiple Clauses
-
-```elixir
-# Pattern match on event names and extract params in function head
-def handle_event("delete", %{"id" => id}, socket) do
-      # ...
-  end
-
-def handle_event("update", %{"id" => id, "value" => value}, socket) do
-  # ...
-end
-```
 
 ### Assign Updates
 
@@ -242,8 +214,7 @@ When working on Elixir projects:
 
 | Anti-Pattern | Idiomatic Alternative |
 |--------------|----------------------|
-| `if x != nil` | Pattern match: `def f(%{x: x}) when not is_nil(x)` |
-| Nested if/else | `case` or `with` |
+| `if x != nil` | Pattern match: `case x do %{field: val} -> ... end` |
 | `try/rescue` for control flow | Pattern match on `{:ok, _}` / `{:error, _}` |
 | `Enum.map` + `Enum.filter` | `Enum.filter` then `Enum.map`, or `for` comprehension |
 | String concatenation `<>` in loops | `IO.iodata_to_binary` with iolists |

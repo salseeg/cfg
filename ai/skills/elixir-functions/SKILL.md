@@ -173,14 +173,14 @@ Use this when the function's job is "check for a specific problem, otherwise pas
 
 When you have a sequence of fallible operations and simpler constructs (`case`, `if`, `with`) don't keep the code flat, declare each step as a named anonymous function, then chain them through a short-circuit helper. Each step either returns a terminal value (`:ok`, `{:ok, _}`, `{:error, _}`) to stop, or a raw value that flows into the next step.
 
-Declare steps as named anonymous functions at the top of the function body, then put the pipeline at the bottom. The variable names document intent, reading order matches execution order, and the pipeline reads as a summary.
+Declare steps as named anonymous functions at the top of the function body, then put the pipeline at the bottom. Name each step as **action + data** — what it does and what it acts on — so the pipeline reads as prose. Reading order matches execution order.
 
 ```elixir
 def stop(opts) do
   pg_data_dir = Path.join(Keyword.fetch!(opts, :pg_dir), "data")
   run_dir = extract_pg_run_dir(pg_dir, opts)
 
-  check_running = fn
+  check_if_running = fn
     false ->
       ["PostgreSQL server not running"] |> log(:info)
       :ok
@@ -191,7 +191,7 @@ def stop(opts) do
         as_postgres_user: true, run_dir: run_dir)
   end
 
-  handle_result = fn
+  report_stop = fn
     {_, 0} ->
       ["PostgreSQL server stopped successfully"] |> log(:info)
       :ok
@@ -202,9 +202,19 @@ def stop(opts) do
   end
 
   server_running?(opts)
-  |> go_on(check_running)
-  |> go_on(handle_result)
+  |> go_on(check_if_running)
+  |> go_on(report_stop)
 end
+```
+
+The pipeline reads: check if running, report stop. A longer chain works the same way:
+
+```elixir
+  {initialized?(opts), valid_init?(opts)}
+  |> go_on(check_init_state)
+  |> go_on(evaluate_initdb_output)
+  |> go_on(setup_replication_if_valid)
+  |> go_on(retry_or_fail)
 ```
 
 The short-circuit helper is minimal — it passes raw values through and propagates terminal states unchanged:
