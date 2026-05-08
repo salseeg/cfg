@@ -1,0 +1,27 @@
+# Viber Ad-Blocking Hosts (May 2026)
+# Source: Viber Ads-List-Mar2026.pdf, cookies policy, community blocklists
+# Format: 0.0.0.0 with 10 domains per line
+
+# === Viber's own ad servers ===
+0.0.0.0     ads.viber.com ads.aws.viber.com ads-d.viber.com ads-d-orig.viber.com ads.cdn.viber.com ads-test.viber.com ads.integration.viber.com ads.aws.integration.viber.com ads-d.integration.viber.com ads-d-orig.integration.viber.com
+
+# === Viber analytics & tracking ===
+0.0.0.0     analytics.viber.com analytics.integration.viber.com analytics-db.aws.viber.com analytics-db-ro.aws.viber.com test-analytics.viber.com data-event-proxy.viber.com data-event-proxy.integration.viber.com data-events.cdn.viber.com data-events.cdn.integration.viber.com data-events.cdn.development.viber.com
+0.0.0.0     mixpanel.cdn.viber.com mixpanel.cdn.integration.viber.com abtest.api.viber.com abtest.api.integration.viber.com abff.viber.com abff.integration.viber.com viberpay-activity.viber.com viberpay-activity.integration.viber.com braze-ingest.viber.com braze-ingest.integration.viber.com
+
+# === Viber explore/sponsored content & ad infra ===
+0.0.0.0     explore-screen.cdn.viber.com explore-screen.cdn.integration.viber.com explore-screen.cdn.development.viber.com hpx.viber.com hpx.integration.viber.com hpx-admin.viber.com hpx-admin.aws.viber.com internal-hpx.integration.viber.com internal-hpx.aws.viber.com advertisers.viber.com
+
+# === Rakuten (parent company) ad platform ===
+0.0.0.0     s-bid.rmp.rakuten.com s-imp.rmp.rakuten.com s-clk.rmp.rakuten.com rmp.rakuten.com
+
+# === Third-party ad partners (official Mar 2026 list) ===
+0.0.0.0     admixer.net inv-nets.admixer.net adslot.com algorix.co aax.amazon-adsystem.com aps.amazon.com blasto.ai bizzclick.com gum.criteo.com bidder.criteo.com
+0.0.0.0     doubleverify.com smartadserver.com sharethrough.com districtm.ca ad.doubleclick.net pagead2.googlesyndication.com hightouch.com casalemedia.com indexexchange.com config.inmobi.com
+0.0.0.0     cr.inmobi.com intowow.com loopme.com loopme.me rubiconproject.com fastlane.rubiconproject.com minutemedia.com mobupps.com liftoff.io vungle.com
+0.0.0.0     nativo.com nativo.net postrelease.com onetag.com onetag-sys.com openx.net rtb.openx.net openx.com ofa.opera.com primis.tech risecodes.com
+0.0.0.0     rtbhouse.com creativecdn.com smartyads.com tds.bid thetradedesk.com adsrvr.org triplelift.com 3lift.com smaato.com smaato.net
+0.0.0.0     pubnative.net yeahmobi.com
+
+# === Third-party analytics used by Viber ===
+0.0.0.0     api.mixpanel.com api.taboola.com images.taboola.com adjust.com app.adjust.com
