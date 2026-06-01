@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Usage: spawn-term [--exec CMD [ARGS...]]
+# Without --exec: opens a new terminal with default shell
+# With --exec: opens a new terminal running the given command
+
+CMD=()
+if [ "${1:-}" = "--exec" ]; then
+  shift
+  CMD=("$@")
+fi
+
+spawn_darwin() {
+  local front
+  front=$(osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>/dev/null || echo "")
+
+  if [ ${#CMD[@]} -gt 0 ]; then
+    local cmd_str="${CMD[*]}"
+    case "$front" in
+      iTerm2)
+        osascript -e "tell application \"iTerm2\" to create window with default profile command \"$cmd_str\"" ;;
+      Terminal)
+        osascript -e "tell application \"Terminal\" to do script \"$cmd_str\"" ;;
+      *)
+        osascript -e "tell application \"Terminal\" to do script \"$cmd_str\"" ;;
+    esac
+  else
+    case "$front" in
+      iTerm2) osascript -e 'tell application "iTerm2" to create window with default profile' ;;
+      Terminal) osascript -e 'tell application "Terminal" to do script ""' ;;
+      Alacritty) open -na Alacritty ;;
+      kitty) open -na kitty ;;
+      *) open -na Terminal ;;
+    esac
+  fi
+}
+
+detect_terminal() {
+  local pid=$$
+  while [ "$pid" -gt 1 ]; do
+    pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ') || break
+    local comm
+    comm=$(ps -o comm= -p "$pid" 2>/dev/null | tr -d ' ') || continue
+    case "$comm" in
+      kitty|alacritty|xterm|urxvt|urxvt256c-ml|st|foot|wezterm-gui|gnome-terminal-|xfce4-terminal|konsole|terminator|tilix|sakura)
+        echo "$comm"
+        return
+        ;;
+    esac
+  done
+}
+
+ensure_i3_tabbed() {
+  command -v i3-msg &>/dev/null && i3-msg -t get_workspaces &>/dev/null || return 0
+
+  local current_layout
+  current_layout=$(i3-msg -t get_tree | python3 -c "
+import json, sys
+
+def find_focused(node):
+    if node.get('focused'):
+        return node
+    for child in node.get('nodes', []) + node.get('floating_nodes', []):
+        result = find_focused(child)
+        if result:
+            return result
+    return None
+
+def find_parent(node, target_id, parent=None):
+    if node.get('id') == target_id:
+        return parent
+    for child in node.get('nodes', []) + node.get('floating_nodes', []):
+        result = find_parent(child, target_id, node)
+        if result:
+            return result
+    return None
+
+tree = json.load(sys.stdin)
+focused = find_focused(tree)
+if focused:
+    parent = find_parent(tree, focused['id'])
+    if parent:
+        print(parent.get('layout', ''))
+" 2>/dev/null || echo "")
+
+  if [ "$current_layout" != "tabbed" ]; then
+    i3-msg layout tabbed >/dev/null 2>&1
+  fi
+}
+
+launch_terminal() {
+  local term="$1"
+  shift
+  local cmd=("$@")
+
+  if [ ${#cmd[@]} -gt 0 ]; then
+    case "$term" in
+      kitty)           kitty --detach "${cmd[@]}" ;;
+      alacritty)       alacritty -e "${cmd[@]}" &disown ;;
+      wezterm-gui)     wezterm-gui start -- "${cmd[@]}" &disown ;;
+      foot)            foot "${cmd[@]}" &disown ;;
+      gnome-terminal-) gnome-terminal -- "${cmd[@]}" &disown ;;
+      xfce4-terminal)  xfce4-terminal -e "${cmd[*]}" &disown ;;
+      konsole)         konsole -e "${cmd[@]}" &disown ;;
+      terminator)      terminator -e "${cmd[*]}" &disown ;;
+      tilix)           tilix -e "${cmd[*]}" &disown ;;
+      st)              st "${cmd[@]}" &disown ;;
+      urxvt*)          urxvt -e "${cmd[@]}" &disown ;;
+      xterm)           xterm -e "${cmd[@]}" &disown ;;
+      sakura)          sakura -e "${cmd[*]}" &disown ;;
+      *)               launch_fallback "${cmd[@]}" ;;
+    esac
+  else
+    case "$term" in
+      kitty)           kitty --detach ;;
+      alacritty)       alacritty &disown ;;
+      wezterm-gui)     wezterm-gui &disown ;;
+      foot)            foot &disown ;;
+      gnome-terminal-) gnome-terminal &disown ;;
+      xfce4-terminal)  xfce4-terminal &disown ;;
+      konsole)         konsole &disown ;;
+      terminator)      terminator &disown ;;
+      tilix)           tilix &disown ;;
+      st)              st &disown ;;
+      urxvt*)          urxvt &disown ;;
+      xterm)           xterm &disown ;;
+      sakura)          sakura &disown ;;
+      *)               launch_fallback ;;
+    esac
+  fi
+}
+
+launch_fallback() {
+  local cmd=("$@")
+  if [ ${#cmd[@]} -gt 0 ]; then
+    if command -v kitty &>/dev/null; then kitty --detach "${cmd[@]}"
+    elif command -v alacritty &>/dev/null; then alacritty -e "${cmd[@]}" &disown
+    elif command -v xterm &>/dev/null; then xterm -e "${cmd[@]}" &disown
+    else echo "No terminal found" >&2; exit 1
+    fi
+  else
+    if command -v kitty &>/dev/null; then kitty --detach
+    elif command -v alacritty &>/dev/null; then alacritty &disown
+    elif command -v xterm &>/dev/null; then xterm &disown
+    else echo "No terminal found" >&2; exit 1
+    fi
+  fi
+}
+
+spawn_linux() {
+  local term
+  term=$(detect_terminal)
+  ensure_i3_tabbed
+  launch_terminal "$term" "${CMD[@]}"
+}
+
+case "$(uname -s)" in
+  Darwin) spawn_darwin ;;
+  Linux)  spawn_linux ;;
+  *)      echo "Unsupported OS: $(uname -s)" >&2; exit 1 ;;
+esac
