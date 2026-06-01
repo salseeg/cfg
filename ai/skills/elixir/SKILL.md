@@ -45,6 +45,31 @@ end
 
 For function structure, control flow shapes (pipe, select, railway), single-clause preference, and when to split — follow the **elixir-functions** skill.
 
+### Comments — Prefer Code and Docs Over Prose
+
+Elixir is largely self-explanatory, so keep inline comments sparse. Don't narrate what the code already says.
+
+- **Prefer `@doc` / `@moduledoc`** over comments to describe what a function or module does and why.
+- **Section separators are fine** — a short comment to delimit parts of a module (e.g. `# Client API` / `# Server Callbacks`) aids navigation.
+- **Notes for an LLM/reader are fine** when they capture non-obvious intent, gotchas, or invariants the code can't express on its own.
+- **Drop comments that restate the code.** If a comment just translates the next line into English, delete it.
+
+```elixir
+# BAD - restates the code
+# increment the counter by one
+counter = counter + 1
+
+# fetch the user from the database
+user = Repo.get!(User, id)
+
+# GOOD - doc instead of comment, and a note that adds real context
+@doc "Charges the card; assumes the Stripe customer already exists (see `ensure_customer/1`)."
+def charge(%Customer{stripe_id: id}, amount) do
+  # Stripe rejects amounts under 50 cents — caller guarantees the minimum upstream
+  Stripe.Charge.create(%{customer: id, amount: amount})
+end
+```
+
 ### 2. Let It Crash Philosophy
 
 Don't catch errors that indicate programmer mistakes. Let processes crash and supervisors restart them.
@@ -207,7 +232,7 @@ When working on Elixir projects:
 
 1. **Contexts over scattered modules** - Group related functions in context modules (e.g., `Accounts`, `Orders`)
 2. **Avoid code duplication** - Extract shared logic to private functions or shared modules
-3. **Keep modules focused** - One responsibility per module
+3. **Keep modules focused** - One responsibility per module. For splitting strategies when a module exceeds 300 lines, see the **elixir-module** skill.
 4. **Use structs for domain entities** - Prefer `%User{}` over plain maps for domain objects
 
 ## Common Anti-Patterns to Avoid
