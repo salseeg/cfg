@@ -1,17 +1,17 @@
 ---
 name: elixir-module
-description: Structure Elixir modules for the 300-line limit — escalation ladder for splitting, facade patterns, context organization, and naming conventions. Use when a module is too big, when splitting responsibilities, when organizing a new context namespace, or when `make check` reports a file is too long. Triggers when Claude creates or refactors Elixir modules, or when a user asks about module organization.
+description: Structure Elixir modules within a configurable line limit (default 300, overridable per project in CLAUDE.md) — escalation ladder for splitting, facade patterns, context organization, and naming conventions. Use when a module is too big, when splitting responsibilities, when organizing a new context namespace, or when `make check` reports a file is too long. Triggers when Claude creates or refactors Elixir modules, or when a user asks about module organization.
 ---
 
 # Elixir Module Structure
 
-Every module should stay under 300 lines (`make check` enforces this). When a module grows past that, follow the escalation ladder — try each step in order, stop when you're under the limit.
+Every module should stay under the project's line limit (default: 300 lines, overridable in project CLAUDE.md). `make check` enforces this. When a module grows past that, follow the escalation ladder — try each step in order, stop when you're under the limit.
 
 For function-level structure (30-40 line max, pipe/select/railway shapes), see the **elixir-functions** skill.
 
 ## Generic Escalation Ladder
 
-When any module exceeds 300 lines, try these steps in order — stop when you're under the limit:
+When any module exceeds the line limit, try these steps in order — stop when you're under the limit:
 
 1. **Extract private helper cluster** — find `defp` groups that only call each other, move to a sibling module
 2. **Split by operation type** — separate struct/schema from CRUD/business logic into sibling modules
@@ -262,7 +262,7 @@ When to create a **new top-level context** vs a **sub-namespace**:
 
 3. **Scattered process interface.** A GenServer's `start_link`, client API (`call`/`cast` wrappers), and callbacks should live in one module — the broker pattern. Don't spread `GenServer.call(SomeServer, ...)` across caller modules.
 
-4. **Premature splitting.** A 200-line module with cohesive functions does not need splitting. The limit is 300, not 100. Split when you hit the limit or when the module clearly serves two unrelated purposes.
+4. **Premature splitting.** A 200-line module with cohesive functions does not need splitting. The limit is the project's configured maximum, not half of it. Split when you hit the limit or when the module clearly serves two unrelated purposes.
 
 5. **`use` without a behaviour.** If there are no callbacks to override, prefer `import` or a regular function call. `__using__` macros that just inject imports make debugging harder — the reader can't see what's in scope.
 
