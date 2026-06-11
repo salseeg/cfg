@@ -4,6 +4,7 @@ call plug#begin()
 Plug 'prabirshrestha/vim-lsp'
 Plug 'elixir-editors/vim-elixir'
 Plug 'roblillack/vim-bufferlist'
+Plug 'airblade/vim-gitgutter'
 
 call plug#end()
 
