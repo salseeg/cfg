@@ -5,6 +5,8 @@ Plug 'prabirshrestha/vim-lsp'
 Plug 'elixir-editors/vim-elixir'
 Plug 'roblillack/vim-bufferlist'
 Plug 'airblade/vim-gitgutter'
+Plug 'godlygeek/tabular'
+Plug 'preservim/vim-markdown'
 
 call plug#end()
 
@@ -85,8 +87,31 @@ let g:BufferListMaxWidth = 50
 
 " 
 " 
-" --- my config --- 
+" --- my config ---
 colorscheme desert
+
+" statusline color per mode (needs vim 8.2.3430+ for ModeChanged)
+function! s:StatuslineModeColor() abort
+    let l:m = mode()
+    if l:m =~# '^i'
+        " insert: orange
+        hi StatusLine cterm=NONE ctermfg=232 ctermbg=208 gui=NONE guifg=#000000 guibg=#ff8700
+    elseif l:m =~# "^[vV\<C-v>]"
+        " visual: darkblue/magenta
+        hi StatusLine cterm=NONE ctermfg=255 ctermbg=90 gui=NONE guifg=#eeeeee guibg=#870087
+    else
+        " normal: gray/silver
+        hi StatusLine cterm=NONE ctermfg=232 ctermbg=250 gui=NONE guifg=#000000 guibg=#bcbcbc
+    endif
+endfunction
+
+if exists('##ModeChanged')
+    augroup statusline_mode_color
+        autocmd!
+        autocmd ModeChanged * call s:StatuslineModeColor()
+        autocmd VimEnter,ColorScheme * call s:StatuslineModeColor()
+    augroup END
+endif
 
 set nowrap
 set laststatus=2
@@ -99,4 +124,28 @@ set numberwidth=6
 set nocompatible
 set title
 set encoding=utf-8
+
+" --- folding ---
+set foldenable
+set foldmethod=indent
+set foldlevel=10
+
+set norelativenumber
+
+" --- keymaps ---
+nnoremap <F1>    :w<cr>
+nnoremap <F2>    :w<cr>
+nnoremap <F14>   :noa w<cr>
+nnoremap <F3>    zo
+nnoremap <C-F3>  zO
+nnoremap <F15>   zR
+nnoremap <F4>    zc
+nnoremap <C-F4>  zC
+nnoremap <S-Tab> :b#<cr>
+
+inoremap <F1>    <Esc>:w<CR>
+inoremap <F2>    <Esc>:w<CR>
+inoremap <F3>    <Esc>zo<Insert>
+inoremap <F4>    <Esc>zc<Up><Insert><Down>
+inoremap <S-Tab> <Esc>:b#<cr>
 
