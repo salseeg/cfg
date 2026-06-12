@@ -7,6 +7,9 @@ Plug 'roblillack/vim-bufferlist'
 Plug 'airblade/vim-gitgutter'
 Plug 'godlygeek/tabular'
 Plug 'preservim/vim-markdown'
+Plug 'preservim/nerdtree'
+Plug 'Xuyuanp/nerdtree-git-plugin'
+
 
 call plug#end()
 
@@ -148,4 +151,7 @@ inoremap <F2>    <Esc>:w<CR>
 inoremap <F3>    <Esc>zo<Insert>
 inoremap <F4>    <Esc>zc<Up><Insert><Down>
 inoremap <S-Tab> <Esc>:b#<cr>
+
+nnoremap <F9>    :NERDTreeToggle<cr>
+nnoremap <F21>   :NERDTreeFind<cr>
 
