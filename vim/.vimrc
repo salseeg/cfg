@@ -13,7 +13,7 @@ Plug 'Xuyuanp/nerdtree-git-plugin'
 
 call plug#end()
 
-" --- Plugin config --- 
+" --- Plugin config ---
 "
 " >> vim-lsp
 let g:lsp_use_native_client = 1
@@ -87,6 +87,12 @@ let g:BufferListWidth = 25
 let g:BufferListMaxWidth = 50
 " hi BufferSelected term=reverse ctermfg=white ctermbg=red cterm=bold
 " hi BufferNormal term=NONE ctermfg=black ctermbg=darkcyan cterm=NONE
+
+" 
+" 
+" >> vim-markdown
+let g:vim_markdown_fenced_languages = ['elixir', 'javascript=js', 'typescript=ts']
+autocmd FileType markdown setlocal wrap
 
 " 
 " 
