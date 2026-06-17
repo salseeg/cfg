@@ -5,7 +5,7 @@ description: Structure Elixir functions for readability — fit on one screen, c
 
 # Elixir Function Structure
 
-Every function should be readable as a self-contained unit — understandable without scrolling. Aim for 30-40 lines max. When a function grows beyond that, it's doing too much.
+Every function should be readable as a self-contained unit — understandable without scrolling. 30-40 lines is a smell threshold, not a hard limit — a 50-line function that does one coherent thing is better than three functions that only make sense as a group.
 
 ## Declarative vs Implementive
 
@@ -237,3 +237,66 @@ Steps can produce different shapes between them — unlike `reduce_while`, there
 If a function body doesn't fit one of these three shapes cleanly, it's doing too much. Split it so each piece has one obvious shape.
 
 The goal is not rules for their own sake — it's to make the reader's job easy. A reader should look at any function and immediately recognize: "this is a pipe", "this is a case dispatch", "this is a step chain."
+
+## When NOT to split
+
+Extraction has a cost — every new function is a name the reader must learn and a hop they must follow. Don't split when the cure is worse than the disease.
+
+### Standalone name test
+
+If you can't name the extracted function without referencing its caller's context, it belongs inline. The function name should make sense in a stack trace, a grep result, or a module index — without knowing who calls it.
+
+```elixir
+# Smells — only makes sense inside one caller
+defp prepare_for_validation(data)
+defp handle_middle_part(state)
+
+# Fine — self-contained meaning regardless of caller
+defp normalize_device_path(path)
+defp apply_discount(order)
+```
+
+If the best name you can come up with describes *where* the code runs rather than *what* it does, leave it inline.
+
+### Reuse or complexity gate
+
+Extract only when the piece is (a) used in more than one place, or (b) complex enough that inlining it would break the parent's recognizable shape. A 3-line transformation used once that reads fine inline doesn't earn its own function.
+
+```elixir
+# No reason to extract — simple, used once, reads fine inline
+def process(order) do
+  total = Enum.sum(Enum.map(order.items, & &1.price * &1.quantity))
+  %{order | total: total, processed_at: DateTime.utc_now()}
+end
+
+# Worth extracting — the calculation has standalone meaning and the parent mixes shapes without it
+defp calculate_total(items) do
+  items
+  |> Enum.map(& &1.price * &1.quantity)
+  |> Enum.sum()
+end
+```
+
+### Depth budget
+
+Understanding a function should require at most one hop into private helpers. If a reader has to chase three levels of `defp` to see what actually happens, the splits destroyed locality without adding clarity. Two levels max: the orchestrator and its workers.
+
+```elixir
+# Fine — one hop to understand each step
+def sync(account) do
+  account
+  |> fetch_remote_changes()    # reader can hop into this
+  |> merge_local_state()       # and this — one level deep
+  |> persist()
+end
+
+# Too deep — reader is lost in a call tree
+def sync(account) do
+  prepare_sync(account)        # calls validate_sync_state()
+end                            #   which calls check_sync_preconditions()
+                               #     which calls verify_account_ready()
+```
+
+### Cohesion over size
+
+A function that builds a complex map, handles one protocol message end-to-end, or transforms a data structure through a coherent sequence can run longer than 40 lines and still be clear — as long as it has one recognizable shape and one job. Splitting it into pieces that only make sense together trades one readable function for several unreadable ones.
