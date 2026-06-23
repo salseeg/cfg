@@ -9,7 +9,8 @@ Plug 'godlygeek/tabular'
 Plug 'preservim/vim-markdown'
 Plug 'preservim/nerdtree'
 Plug 'Xuyuanp/nerdtree-git-plugin'
-
+Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
+Plug 'junegunn/fzf.vim'
 
 call plug#end()
 
@@ -133,6 +134,7 @@ set numberwidth=6
 set nocompatible
 set title
 set encoding=utf-8
+set autoread
 
 " --- folding ---
 set foldenable
