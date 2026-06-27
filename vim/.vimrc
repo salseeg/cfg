@@ -99,6 +99,7 @@ autocmd FileType markdown setlocal wrap
 " 
 " --- my config ---
 colorscheme desert
+hi LineNr ctermfg=245 guifg=#8a8a8a
 
 " statusline color per mode (needs vim 8.2.3430+ for ModeChanged)
 function! s:StatuslineModeColor() abort
