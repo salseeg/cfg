@@ -161,6 +161,8 @@ inoremap <F3>    <Esc>zo<Insert>
 inoremap <F4>    <Esc>zc<Up><Insert><Down>
 inoremap <S-Tab> <Esc>:b#<cr>
 
+vnoremap ta <Esc>'<OAI: see <C-r>=line("'>") - line("'<") + 1<CR> bellow.
+
 nnoremap <F9>    :NERDTreeToggle<cr>
 nnoremap <F21>   :NERDTreeFind<cr>
 
