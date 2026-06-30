@@ -1,3 +1,3 @@
-vnoremap ta <Esc>'<OAI: see <C-r>=line("'>") - line("'<") + 1<CR> bellow.
+vnoremap ta <Esc>'<O#AI: see <C-r>=line("'>") - line("'<") + 1<CR> lines bellow.
 
 
