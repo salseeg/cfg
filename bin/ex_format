@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+target="${1:-.}"
+
+if [ -d "$target" ]; then
+  search_dir="$(realpath "$target")"
+else
+  search_dir="$(dirname "$(realpath "$target")")"
+fi
+
+dir="$search_dir"
+while [ "$dir" != "/" ]; do
+  if [ -f "$dir/mix.exs" ]; then
+    cd "$dir"
+    exec mix format "$(realpath "$target")"
+  fi
+  dir="$(dirname "$dir")"
+done
+
+echo "No mix.exs found in any parent of $target" >&2
+exit 1
