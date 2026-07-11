@@ -91,6 +91,19 @@ vim.keymap.set("i", "<F3>", "<Esc>zo<Insert>")
 vim.keymap.set("i", "<F4>", "<Esc>zc<Up><Insert><Down>")
 vim.keymap.set("i", "<S-Tab>", "<Esc>:b#<cr>")
 
+vim.keymap.set("v", "ta", function()
+  local s = vim.fn.line("v")
+  local e = vim.fn.line(".")
+  if s > e then s, e = e, s end
+  local count = e - s + 1
+  local text = "#AI: see " .. count .. " lines bellow. "
+  local esc = vim.api.nvim_replace_termcodes("<Esc>", true, false, true)
+  vim.api.nvim_feedkeys(esc, "nx", false)
+  vim.api.nvim_buf_set_lines(0, s - 1, s - 1, false, { text })
+  vim.api.nvim_win_set_cursor(0, { s, #text - 1 })
+  vim.cmd("startinsert!")
+end)
+
 -- Set up custom filetypes
 -- vim.filetype.add {
 --   extension = {
