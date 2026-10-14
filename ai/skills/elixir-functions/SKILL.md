@@ -169,6 +169,32 @@ end
 
 Use this when the function's job is "check for a specific problem, otherwise pass through."
 
+#### Fail-closed inverse `with`
+
+The catch-all `_ -> changeset` above is fail-open — any unexpected return silently passes through. When the gate must deny by default, enumerate the known-good cases in `else` and reject everything else:
+
+```elixir
+defp validate_origin_gate(changeset) do
+  origin_hash = Ecto.Changeset.get_field(changeset, :origin_hash)
+  author_hash = Ecto.Changeset.get_field(changeset, :author_hash)
+
+  with "invite_only" <- OriginSetting.get_review_access(origin_hash),
+       %{owner_hash: owner_hash} <- OriginData.get_origin(origin_hash),
+       false <- author_hash in [origin_hash, owner_hash],
+       scope = "origins.#{origin_hash}.reviews.write",
+       :unreachable <- VouchTokenData.chain_distance(origin_hash, author_hash, scope, max_depth()) do
+    Ecto.Changeset.add_error(changeset, :author_hash, "not invited")
+  else
+    {:ok, _} -> changeset   # vouch chain found
+    true -> changeset        # owner/origin exempt
+    "open" -> changeset      # open mode, no gate
+    _ -> Ecto.Changeset.add_error(changeset, :author_hash, "not invited")
+  end
+end
+```
+
+Prefer fail-closed when the `with` guards a security boundary — only explicitly matched pass-through values should allow access.
+
 ### 3. Railway — a chain of steps that can bail out
 
 When you have a sequence of fallible operations and simpler constructs (`case`, `if`, `with`) don't keep the code flat, declare each step as a named anonymous function, then chain them through a short-circuit helper. Each step either returns a terminal value (`:ok`, `{:ok, _}`, `{:error, _}`) to stop, or a raw value that flows into the next step.
