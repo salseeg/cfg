@@ -27,6 +27,16 @@ Before calling the wizard, collect context it will need. Run these read-only com
 
 Also note what project this is in (check CLAUDE.md) and any relevant architecture info you already know.
 
+#### Graphify context (if available)
+
+Check whether `graphify-out/graph.json` exists in the working directory. If it does:
+
+1. Run `graphify query "<the user's task>"` to get a scoped subgraph with relevant modules, dependencies, and relationships.
+2. If the task involves connecting two parts of the system, also run `graphify path "<A>" "<B>"`.
+3. Include the graphify output in the wizard prompt's **Context** section — it gives the wizard architectural orientation that raw grep cannot.
+
+If `graphify-out/graph.json` does not exist, skip this — do not install or run graphify just for the wizard.
+
 ### Step 2 — Call Opus 5.5 via CLI
 
 Use `claude --model claude-opus-5-5 --print` via Bash. This bypasses the Agent tool's model alias limitation (where `"opus"` resolves to the current session's model, not Opus 5.5).
@@ -114,16 +124,48 @@ Tell the user: "Wizard is thinking (Opus 5.5). You'll be notified when it's done
 
 When notified of completion, read `$SCRATCHPAD/wizard_output.txt` with the Read tool. This is the implementation brief.
 
+### Step 2.5 — Save and present the brief
+
+#### Persist the brief
+
+Save the wizard output to a durable location so future conversations can reference it:
+
+```
+$PROJECT_ROOT/wizard-briefs/<timestamp>-<slug>.md
+```
+
+Where `<timestamp>` is `YYYY-MM-DD` and `<slug>` is a short kebab-case label derived from the task (e.g. `2026-10-17-vouch-token-refactor.md`). Create `wizard-briefs/` if it doesn't exist. Add a YAML frontmatter header:
+
+```markdown
+---
+task: "<the user's original request, one line>"
+model: claude-opus-5-5
+date: <YYYY-MM-DD>
+status: pending
+---
+```
+
+Set `status` to `pending` on creation. Update it to `implemented` or `rejected` after Step 3.
+
+#### Surface to the user
+
+Publish the brief as an Artifact so the user can review it before any code is written. Tell the user:
+
+> "Here's the wizard's plan. Review it — I'll implement once you give the go-ahead, or tell me what to change."
+
+**Do not start implementing until the user approves.** If the user says nothing and continues with an unrelated message, treat the brief as parked — don't implement silently.
+
 ### Step 3 — Implement
 
-Once you have the brief:
+Once the user approves the brief:
 
 1. Read the brief carefully — it is your implementation plan
 2. If the brief has obvious gaps or you disagree with the approach, tell the user before implementing
 3. Implement the steps yourself
 4. Follow project code style (CLAUDE.md, STYLE.md)
 5. Run tests and formatters as the brief's verification section says
-6. Report what you did — one short summary
+6. Update the brief's `status:` frontmatter to `implemented` (or `rejected` if the user declined)
+7. Report what you did — one short summary
 
 ## Key rules
 
@@ -133,3 +175,6 @@ Once you have the brief:
 - Run with `run_in_background: true` so the user isn't blocked.
 - For trivial tasks, tell the user it's not worth a wizard call and just do the work.
 - If the wizard returns nothing useful, tell the user — don't silently ignore the failure.
+- **Always present the brief to the user before implementing.** Wait for approval.
+- **Always save briefs** to `wizard-briefs/` — they're a persistent record of architectural decisions.
+- **Use graphify** when `graphify-out/graph.json` exists — it gives the wizard much better codebase orientation than blind grepping.
