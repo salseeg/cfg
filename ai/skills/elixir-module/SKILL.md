@@ -254,9 +254,13 @@ When to create a **new top-level context** vs a **sub-namespace**:
 
 8. **`@moduledoc` explains the split.** After splitting, each module's `@moduledoc` should name what it owns and reference its siblings, so a reader landing anywhere understands the namespace.
 
+9. **Multi-alias consistency.** Be consistent with multi-alias syntax (`alias Foo.{Bar, Baz}`) vs separate lines within a module. Enforced by `Credo.Check.Consistency.MultiAliasImportRequireUse`.
+
+10. **Public function arity limit.** Keep public function arity within Credo's default limit. Private functions (`defp`) are exempt (`FunctionArity[ignore_defp: true]`).
+
 ## Anti-Patterns
 
-1. **Namespace trespassing.** Module namespace must match file path. Don't define `MyApp.Rooms.Room` in a file under `my_app/dialogs/`.
+1. **Namespace trespassing.** Module name must match file path (`CredoNaming.Check.Consistency.ModuleFilename`). Acronyms are handled: GraphQL, LinkedIn, PubSub, HubSpot, PostHog, RingCentral, EMoney, OpenAI, AssemblyAI, GenServer, OAuth, CRM, CRMs, PRs, LLM, E2E. Don't define `MyApp.Rooms.Room` in a file under `my_app/dialogs/`.
 
 2. **God module with unrelated functions.** If a module has public functions for users AND rooms AND admin, it should be three modules. This is the primary cause of 300-line violations.
 
