@@ -5,324 +5,139 @@ description: Structure Elixir functions for readability — fit on one screen, c
 
 # Elixir Function Structure
 
-Every function should be readable as a self-contained unit — understandable without scrolling. 30-40 lines is a smell threshold, not a hard limit — a 50-line function that does one coherent thing is better than three functions that only make sense as a group.
+A function is read as one unit, without scrolling. 30-40 lines is a smell, not a limit: one coherent 50-line function beats three that only make sense together.
 
-## Declarative vs Implementive
+## Rules
 
-A function is either **declarative** — showing *what* happens by calling well-named helpers — or **implementive** — showing *how* something works with actual logic.
+1. **One primary shape per body**: pipe, select, or railway (see below). A pipe may end in a `case`; a select may hold a short pipe. If no single shape fits, the function does too much.
+2. **One level of branching.** A `case` inside a `case` branch means `with` or extract.
+3. **Declarative or implementive, not alternating.** Either the body calls named helpers, or it does the work. A one-liner between named calls is fine; a multi-line logic block between them is not.
+4. **Standalone names.** The name must make sense in a stack trace without seeing the caller: `apply_discount`, not `step_three` or `prepare_for_validation`. If the best name says *where* the code runs, keep it inline. Exception: `do_foo/N` recursion accumulators.
+5. **Depth budget of two.** Orchestrator and its workers. If understanding needs a third hop, the splits destroyed locality.
+6. **Extract only for reuse or shape.** Used in two places, or complex enough that inlining breaks the parent's shape. A 3-line transform used once stays inline.
+7. **Subject first.** The main argument comes first so the call pipes: `["Stopping ", run_dir] |> log(:info)`. Build messages as iolists, not interpolation.
+8. **One return shape per function.** Never `nil` on one path and `{:error, _}` on another.
+9. **No defensive checks mid-pipe.** No nil guards, no error-tuple handling between steps. Wrong data crashes.
+10. **Fail closed at security boundaries.** When a branch decides access, enumerate the values that allow it and reject everything else. A catch-all that passes through is a hole.
+11. **`try`/`rescue` is not a shape.** Only at the boundary with a library that raises, alone in its own function.
 
-Mixing is fine when the implementation bits are dead simple (a one-liner between named calls), but if you're alternating between named calls and multi-line logic blocks, extract.
+## Clauses
 
-```elixir
-# Declarative — reads like a plan
-def user_card_validate(card, changes, :insert) do
-  card
-  |> UserCard.create_changeset(changes)
-  |> validate_signature()
-  |> fail_invalid_user_card()
-end
+Multi-clause is for one-liners. Multi-line bodies side by side hide the control flow.
 
-# Implementive — shows the actual work
-def calculate_totals(%{items: items} = order) do
-  total =
-    items
-    |> Enum.map(& &1.price * &1.quantity)
-    |> Enum.sum()
-
-  %{order | total: total}
-end
-```
-
-## Naming
-
-A function name should describe what *this function does* as a standalone piece — not its role inside a larger flow. Someone reading the name in a stack trace, a grep result, or a module index should understand its purpose without needing to see the caller.
+Allowed: all clauses are `, do:` one-liners, or one-liners plus **at most one** multi-line clause, placed first or last. Anything else becomes a single clause with `case`/`cond`/`with` inside.
 
 ```elixir
-# Weak — only makes sense inside a specific pipeline
-defp step_three(data)
-
-# Strong — self-contained meaning
-defp apply_discount(order)
-defp fail_invalid_user_card(changeset)
-defp capture_pg_crash_logs(pg_dir)
-```
-
-## Single-Clause Functions
-
-Prefer one function clause with internal branching (`case`/`cond`/`with`) over multiple clauses. All paths sit on one screen and the reader sees the full picture.
-
-Multi-clause is fine for truly trivial cases — one-line formatters, protocol implementations, or when the function head pattern match *is* the entire logic:
-
-```elixir
-# Fine as multi-clause — each clause is one line
+# fine: one-liners
 defp pub_key(%Identity{public_key: key}), do: key
 defp pub_key(%Card{pub_key: key}), do: key
-defp pub_key(%Room{pub_key: key}), do: key
+
+# fine: one-liners plus a single multi-line clause, last
+def handle_info(:tick, state), do: {:noreply, schedule(state)}
+def handle_info({:chunk, data}, state) do
+  state = append(state, data)
+  {:noreply, maybe_flush(state)}
+end
+
+# not fine: two multi-line clauses -> one clause, case inside
 ```
 
-## Control Flow
+Use `when` guards for type and range checks instead of `if` in the body; `defguard` for repeated ones.
 
-There are three shapes a function body should take. They can combine naturally (a pipe ending in a case, a select inside `then/2`), but each function should have one *primary* shape that the reader recognizes at a glance.
+## Shapes
 
-### 1. Pipe — linear transformation
+### Pipe
 
-Data flows in one direction through a sequence of steps. Use `then/2` for inline value reshaping and `tap/2` for side effects that shouldn't alter the data. Do not add defensive nil-checks or error-tuple guards mid-pipe — let it crash if the data is wrong.
-
-```elixir
-def format_report(raw_data) do
-  raw_data
-  |> parse_entries()
-  |> group_by_category()
-  |> sort_by_date()
-  |> render_table()
-end
-
-def store_and_notify(parcel) do
-  parcel
-  |> tap(fn p -> Enum.each(p.data, fn {key, val} -> Db.put(key, val) end) end)
-  |> tap(&notify_subscribers/1)
-  |> then(fn p -> {:ok, p.id} end)
-end
-```
-
-#### Pipe into select
-
-A pipe can end with a `case` or `then/2` that branches — the pipe does the transformation, the tail picks the outcome. Prefer `case` when it fits; reach for `then/2` only when you need to bind the piped value to a name or destructure it in a way `case` can't express cleanly:
+Linear transform. `then/2` reshapes a value, `tap/2` for side effects. End in `case` when the pipe transforms and the tail picks the outcome; `then/2` with a multi-clause fn only when `case` cannot destructure it.
 
 ```elixir
-def unmount(device) do
-  device
-  |> normalize_device_path()
-  |> Maintenance.device_to_path()
-  |> then(fn
-    nil  -> :nothing_to_unmount
-    path -> Mount.unmount(path)
-  end)
-end
-
-def file_stats(keys, prefix \\ nil) do
-  keys
-  |> Dir2.file_path(build_path(prefix))
-  |> File.stat(time: :posix)
-  |> case do
-    {:ok, _} = good -> good
-    _ -> keys |> Dir3.file_path(build_path(prefix)) |> File.stat(time: :posix)
-  end
+device
+|> normalize_device_path()
+|> Maintenance.device_to_path()
+|> case do
+  nil -> :nothing_to_unmount
+  path -> Mount.unmount(path)
 end
 ```
 
-### 2. Select — choosing between a small number of outcomes
+Hygiene: no pipe starting with a call (`foo(x) |> bar()`), no single-step pipes, no `|> (fn ... end).()`. Name an intermediate when the value is used twice or the pipe passes ~6 steps.
 
-When a function picks between a few distinct paths, use the construct that fits the branching condition:
+### Select
 
-- **`case`** — matching on a value's shape
-- **`if`** — simple boolean
-- **`cond`** — multiple boolean conditions
-- **`with`** (happy path) — chaining operations that might fail, first failure falls through
-- **`with`** (inverse — unhappy path) — failure cases go in the `with` body, success goes in `else`
+- `case`: value shape
+- `if`: one boolean
+- `cond`: several booleans
+- `with` (happy path): fallible steps chained, first failure falls through
+- `with` (inverse): the *unhappy* conditions in the head, body handles the failure, `else` passes through
 
-#### `case` for dispatch
-
-```elixir
-def heal(device) do
-  case Lsblk.fs_type(device) do
-    "vfat" -> Fsck.vfat(device)
-    "f2fs" -> Fsck.f2fs(device)
-    "exfat" -> Fsck.exfat(device)
-    _ -> false
-  end
-end
-```
-
-#### `cond` for multiple conditions
+`else` receives the mismatch from **every** clause. With more than one fallible step, tag each error (`{:error, :fetch}`) or drop `else` and return the mismatch as is.
 
 ```elixir
-defp decide(path) do
-  cond do
-    File.exists?("#{path}/cargo_db")   -> CargoSyncSupervisor
-    File.exists?("#{path}/main_db")    -> MainDbSupervisor
-    create_first_main?()               -> MainDbSupervisor
-    true                               -> default_scenario()
-  end
-end
-```
-
-#### Inverse `with` — handling the unhappy path
-
-Sometimes the interesting work is detecting a problem. The `with` head matches the *unhappy* conditions so the body handles the failure, and `else` handles the normal case.
-
-Note: `<-` in `with` serves double duty — it can guard (match fails → skip to else) or just bind a value for later clauses. In this pattern the first and third clauses are guards (`true <-`, `false <-`), while the middle one is a binding step:
-
-```elixir
+# inverse with: detect one problem, otherwise pass through
 defp fail_invalid_user_card(changeset) do
   with true <- changeset.valid?,
-       card_data <- Ecto.Changeset.apply_changes(changeset),
-       false <- UserData.valid_card?(card_data) do
-    # unhappy: card looked valid but integrity check failed
+       card <- Ecto.Changeset.apply_changes(changeset),
+       false <- UserData.valid_card?(card) do
     Ecto.Changeset.add_error(changeset, :user_hash, "invalid_user_card_integrity")
   else
-    # normal: changeset already invalid, or card passed validation
     _ -> changeset
   end
 end
 ```
 
-Use this when the function's job is "check for a specific problem, otherwise pass through."
-
-#### Fail-closed inverse `with`
-
-The catch-all `_ -> changeset` above is fail-open — any unexpected return silently passes through. When the gate must deny by default, enumerate the known-good cases in `else` and reject everything else:
+The `_ -> changeset` above is fail-open: any unexpected value passes. When the inverse `with` guards access (rule 10), `else` lists the known pass-through values explicitly and the final `_` adds the error:
 
 ```elixir
-defp validate_origin_gate(changeset) do
-  origin_hash = Ecto.Changeset.get_field(changeset, :origin_hash)
-  author_hash = Ecto.Changeset.get_field(changeset, :author_hash)
-
-  with "invite_only" <- OriginSetting.get_review_access(origin_hash),
-       %{owner_hash: owner_hash} <- OriginData.get_origin(origin_hash),
-       false <- author_hash in [origin_hash, owner_hash],
-       scope = "origins.#{origin_hash}.reviews.write",
-       :unreachable <- VouchTokenData.chain_distance(origin_hash, author_hash, scope, max_depth()) do
-    Ecto.Changeset.add_error(changeset, :author_hash, "not invited")
   else
     {:ok, _} -> changeset   # vouch chain found
-    true -> changeset        # owner/origin exempt
-    "open" -> changeset      # open mode, no gate
+    true -> changeset       # owner exempt
+    "open" -> changeset     # no gate in open mode
     _ -> Ecto.Changeset.add_error(changeset, :author_hash, "not invited")
   end
-end
 ```
 
-Prefer fail-closed when the `with` guards a security boundary — only explicitly matched pass-through values should allow access.
+### Railway
 
-### 3. Railway — a chain of steps that can bail out
-
-When you have a sequence of fallible operations and simpler constructs (`case`, `if`, `with`) don't keep the code flat, declare each step as a named anonymous function, then chain them through a short-circuit helper. Each step either returns a terminal value (`:ok`, `{:ok, _}`, `{:error, _}`) to stop, or a raw value that flows into the next step.
-
-Declare steps as named anonymous functions at the top of the function body, then put the pipeline at the bottom. Name each step as **action + data** — what it does and what it acts on — so the pipeline reads as prose. Reading order matches execution order.
+A chain of fallible steps whose shapes differ between steps, when `with` would not stay flat. Declare steps as anonymous functions at the top (they close over locals, so nothing is threaded through parameters), name them *action + data*, pipe through `go_on` at the bottom. A step returns `:ok` / `{:ok, _}` / `{:error, _}` to stop; any other value flows to the next step.
 
 ```elixir
 def stop(opts) do
-  pg_data_dir = Path.join(Keyword.fetch!(opts, :pg_dir), "data")
-  run_dir = extract_pg_run_dir(pg_dir, opts)
+  data_dir = Path.join(Keyword.fetch!(opts, :pg_dir), "data")
 
-  check_if_running = fn
-    false ->
-      ["PostgreSQL server not running"] |> log(:info)
-      :ok
-
-    true ->
-      ["Stopping PostgreSQL server with run_dir ", run_dir] |> log(:info)
-      run_pg("pg_ctl", ["-D", pg_data_dir, "stop", "-m", "fast"],
-        as_postgres_user: true, run_dir: run_dir)
+  stop_server = fn
+    false -> :ok
+    true -> run_pg("pg_ctl", ["-D", data_dir, "stop", "-m", "fast"])
   end
 
   report_stop = fn
-    {_, 0} ->
-      ["PostgreSQL server stopped successfully"] |> log(:info)
-      :ok
-
-    {output, _} ->
-      ["PostgreSQL server failed to stop: ", output] |> log(:error)
-      {:error, output}
+    {_, 0} -> :ok
+    {output, _} -> {:error, output}
   end
 
   server_running?(opts)
-  |> go_on(check_if_running)
+  |> go_on(stop_server)
   |> go_on(report_stop)
 end
-```
 
-The pipeline reads: check if running, report stop. A longer chain works the same way:
-
-```elixir
-  {initialized?(opts), valid_init?(opts)}
-  |> go_on(check_init_state)
-  |> go_on(evaluate_initdb_output)
-  |> go_on(setup_replication_if_valid)
-  |> go_on(retry_or_fail)
-```
-
-The short-circuit helper is minimal — it passes raw values through and propagates terminal states unchanged:
-
-```elixir
-def go_on(data, step_fn) do
+def go_on(data, step) do
   case data do
     {:error, _} -> data
-    {:ok, _}    -> data
-    :ok         -> data
-    _           -> step_fn.(data)
+    {:ok, _} -> data
+    :ok -> data
+    _ -> step.(data)
   end
 end
 ```
 
-Steps can produce different shapes between them — unlike `reduce_while`, there's no homogeneous accumulator constraint. Each step pattern-matches on whatever the previous step produced.
+If the codebase has no `go_on`, add it to a shared utility module. Use `Ecto.Multi` for DB transactions and `Enum.reduce_while` for a homogeneous accumulator instead.
 
-## When to split
+## Review checklist
 
-If a function body doesn't fit one of these three shapes cleanly, it's doing too much. Split it so each piece has one obvious shape.
-
-The goal is not rules for their own sake — it's to make the reader's job easy. A reader should look at any function and immediately recognize: "this is a pipe", "this is a case dispatch", "this is a step chain."
-
-## When NOT to split
-
-Extraction has a cost — every new function is a name the reader must learn and a hop they must follow. Don't split when the cure is worse than the disease.
-
-### Standalone name test
-
-If you can't name the extracted function without referencing its caller's context, it belongs inline. The function name should make sense in a stack trace, a grep result, or a module index — without knowing who calls it.
-
-```elixir
-# Smells — only makes sense inside one caller
-defp prepare_for_validation(data)
-defp handle_middle_part(state)
-
-# Fine — self-contained meaning regardless of caller
-defp normalize_device_path(path)
-defp apply_discount(order)
-```
-
-If the best name you can come up with describes *where* the code runs rather than *what* it does, leave it inline.
-
-### Reuse or complexity gate
-
-Extract only when the piece is (a) used in more than one place, or (b) complex enough that inlining it would break the parent's recognizable shape. A 3-line transformation used once that reads fine inline doesn't earn its own function.
-
-```elixir
-# No reason to extract — simple, used once, reads fine inline
-def process(order) do
-  total = Enum.sum(Enum.map(order.items, & &1.price * &1.quantity))
-  %{order | total: total, processed_at: DateTime.utc_now()}
-end
-
-# Worth extracting — the calculation has standalone meaning and the parent mixes shapes without it
-defp calculate_total(items) do
-  items
-  |> Enum.map(& &1.price * &1.quantity)
-  |> Enum.sum()
-end
-```
-
-### Depth budget
-
-Understanding a function should require at most one hop into private helpers. If a reader has to chase three levels of `defp` to see what actually happens, the splits destroyed locality without adding clarity. Two levels max: the orchestrator and its workers.
-
-```elixir
-# Fine — one hop to understand each step
-def sync(account) do
-  account
-  |> fetch_remote_changes()    # reader can hop into this
-  |> merge_local_state()       # and this — one level deep
-  |> persist()
-end
-
-# Too deep — reader is lost in a call tree
-def sync(account) do
-  prepare_sync(account)        # calls validate_sync_state()
-end                            #   which calls check_sync_preconditions()
-                               #     which calls verify_account_ready()
-```
-
-### Cohesion over size
-
-A function that builds a complex map, handles one protocol message end-to-end, or transforms a data structure through a coherent sequence can run longer than 40 lines and still be clear — as long as it has one recognizable shape and one job. Splitting it into pieces that only make sense together trades one readable function for several unreadable ones.
+- One primary shape, recognizable at a glance
+- One level of branching
+- Names stand alone without the caller
+- Two hops max from the public function to the work
+- Clauses: one-liners, plus at most one multi-line clause, first or last
+- One return shape
+- Subject-first arguments, iolists for messages
+- Nothing extracted that is used once and reads fine inline
