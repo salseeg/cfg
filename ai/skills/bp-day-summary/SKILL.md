@@ -36,7 +36,14 @@ gh search issues --involves=salseeg --updated=">=$(date -u +%Y-%m-%d)T00:00:00Z"
 gh search issues --involves=sergey-lukianov --updated=">=$(date -u +%Y-%m-%d)T00:00:00Z" --limit 20 --json title,url,state,updatedAt,repository
 ```
 
-Deduplicate results across both profiles.
+Deduplicate results across both profiles. **Exclude** results from personal repos (`salseeg/*`) — only include activity in team/org repos (e.g. `Buckitup-chat/*`).
+
+```bash
+# PRs merged today in team repos, authored by others (i.e. PRs the user reviewed/merged)
+gh api 'search/issues?q=type:pr+is:merged+repo:Buckitup-chat/chat+merged:>='"$(date -u +%Y-%m-%d)"'+-author:salseeg+-author:sergey-lukianov&per_page=20' --jq '.items[] | {title: .title, url: .html_url, author: .user.login}'
+```
+
+These are PRs the user merged from others. Credit them as "merged (by &lt;author&gt;)".
 
 ### 3. Fresh Logs
 
